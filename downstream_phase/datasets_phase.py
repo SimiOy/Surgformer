@@ -4,6 +4,7 @@ from datasets.transforms.surg_transforms import *
 
 from datasets.phase.Cholec80_phase import PhaseDataset_Cholec80
 from datasets.phase.AutoLaparo_phase import PhaseDataset_AutoLaparo
+from datasets.phase.LungRes80_phase import PhaseDataset_LungRes80
 
 def build_dataset(is_train, test_mode, fps, args):
     """Load video phase recognition dataset."""
@@ -63,6 +64,41 @@ def build_dataset(is_train, test_mode, fps, args):
             anno_path = os.path.join(args.data_path, "labels_pkl", mode, fps + "val.pickle")
         
         dataset = PhaseDataset_AutoLaparo(
+            anno_path=anno_path,
+            data_path=args.data_path,
+            mode=mode,
+            data_strategy=args.data_strategy,
+            output_mode=args.output_mode,
+            cut_black=args.cut_black,
+            clip_len=args.num_frames,
+            frame_sample_rate=args.sampling_rate,
+            keep_aspect_ratio=True,
+            crop_size=args.input_size,
+            short_side_size=args.short_side_size,
+            new_height=256,
+            new_width=320,
+            args=args,
+        )
+        nb_classes = 7
+
+    elif args.data_set == "LungRes80":
+        mode = None
+        anno_path = None
+        if is_train is True:
+            mode = "train"
+            anno_path = os.path.join(
+                args.data_path, "labels", mode, fps + "train.pickle"
+            )
+        elif test_mode is True:
+            mode = "test"
+            anno_path = os.path.join(
+                args.data_path, "labels", mode, fps + "test.pickle"
+            )
+        else:
+            mode = "val"
+            anno_path = os.path.join(args.data_path, "labels", mode, fps + "val.pickle")
+        
+        dataset = PhaseDataset_LungRes80(
             anno_path=anno_path,
             data_path=args.data_path,
             mode=mode,

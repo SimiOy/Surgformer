@@ -589,11 +589,9 @@ def surgformer_base(pretrained=False, pretrain_path=None, **kwargs):
 
 if __name__ == "__main__":
     import utils
-    from datasets.args import get_args_finetuning
     import os
     os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 
-    args = get_args_finetuning()[0]
     model = surgformer_base(
         pretrained=True,
         # pretrain_path="/home/yangshu/SurgSSL/pretrain_params/timesformer_base_patch16_224_K400.pyth"

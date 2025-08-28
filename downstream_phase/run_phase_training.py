@@ -37,7 +37,7 @@ import utils
 from model.surgformer_base import surgformer_base
 from model.surgformer_HTA import surgformer_HTA
 from model.surgformer_HTA_KCA import surgformer_HTA_KCA
-
+from model.AVT import AVT
 
 def get_args():
     parser = argparse.ArgumentParser(
@@ -318,7 +318,7 @@ def get_args():
     parser.add_argument(
         "--data_set",
         default="AutoLaparo",
-        choices=["Cholec80", "AutoLaparo"],
+        choices=["Cholec80", "AutoLaparo", "LungRes80"],
         type=str,
         help="dataset",
     )

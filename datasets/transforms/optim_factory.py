@@ -42,6 +42,17 @@ def get_num_layer_for_vit(var_name, num_max_layer):
     elif var_name.startswith("transformer.resblocks"):
         layer_id = int(var_name.split('.')[2])
         return layer_id + 1
+    # Handle SimplifiedAVTModel backbone parameters
+    elif var_name.startswith("backbone.model.blocks"):
+        layer_id = int(var_name.split('.')[3])
+        return layer_id + 1
+    elif var_name.startswith("backbone.model.patch_embed"):
+        return 0
+    elif var_name.startswith("backbone.model.cls_token"):
+        return 0
+    elif var_name.startswith("backbone.model.pos_embed"):
+        return 0
+    # For other parameters (temporal_aggregator, classifier, etc.), use max layer
     else:
         return num_max_layer - 1
 
