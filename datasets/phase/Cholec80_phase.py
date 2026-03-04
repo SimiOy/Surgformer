@@ -465,7 +465,7 @@ class PhaseDataset_Cholec80(Dataset):
                     self.data_path,
                     "frames",
                     line_info["video_id"],
-                    str(line_info["frame_id"]).zfill(5) + ".png",
+                    line_info["video_id"] + "_" + str(line_info["frame_id"] + 1).zfill(6) + ".png",
                 )
                 # 当使用1fps采样时，line_info["frame_id"]类似于对应的序号，line_info["original_frame_id"]表示对应的图像序号
                 line_info["img_path"] = img_path

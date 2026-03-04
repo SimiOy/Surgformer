@@ -1,118 +1,110 @@
-import numpy as np
 import os
-import cv2
 import pickle
 from tqdm import tqdm
+
 
 def main():
     import argparse as _ap
     _p = _ap.ArgumentParser()
-    _p.add_argument("--data-dir", default="data/Cholec80", help="Root Cholec80 directory")
+    _p.add_argument("--data-dir", default="data/Cholec80",
+                    help="Root Cholec80 directory (TF-Cholec80 format, no raw videos)")
     _args, _ = _p.parse_known_args()
     ROOT_DIR = _args.data_dir
-    VIDEO_NAMES = os.listdir(os.path.join(ROOT_DIR, 'videos'))
-    VIDEO_NAMES = sorted([x for x in VIDEO_NAMES if 'mp4' in x])
-    TRAIN_NUMBERS = np.arange(1,41).tolist()
-    TEST_NUMBERS = np.arange(41,81).tolist()
 
-    TRAIN_FRAME_NUMBERS = 0
-    TEST_FRAME_NUMBERS = 0
+    phase2id = {
+        'Preparation': 0, 'CalotTriangleDissection': 1, 'ClippingCutting': 2,
+        'GallbladderDissection': 3, 'GallbladderPackaging': 4,
+        'CleaningCoagulation': 5, 'GallbladderRetraction': 6,
+    }
+
+    TRAIN_NUMBERS = set(range(1, 41))
+    TEST_NUMBERS = set(range(41, 81))
 
     train_pkl = dict()
     test_pkl = dict()
-
-    unique_id = 0
     unique_id_train = 0
     unique_id_test = 0
 
-    phase2id = {'Preparation': 0, 'CalotTriangleDissection': 1, 'ClippingCutting': 2, 'GallbladderDissection': 3, 
-                'GallbladderPackaging': 4, 'CleaningCoagulation': 5, 'GallbladderRetraction': 6}
+    phase_ann_dir = os.path.join(ROOT_DIR, 'phase_annotations')
+    tool_ann_dir = os.path.join(ROOT_DIR, 'tool_annotations')
+    frames_dir = os.path.join(ROOT_DIR, 'frames')
 
-    for video_name in VIDEO_NAMES:
-        video_id = video_name.replace('.mp4', '')
-        vid_id = int(video_name.replace('.mp4', '').replace("video", ""))
-        if vid_id in TRAIN_NUMBERS:
+    ann_files = sorted(f for f in os.listdir(phase_ann_dir) if f.endswith('-phase.txt'))
+
+    for ann_file in tqdm(ann_files):
+        video_id = ann_file.replace('-phase.txt', '')   # e.g. "video03"
+        vid_num = int(video_id.replace('video', ''))
+
+        if not os.path.isdir(os.path.join(frames_dir, video_id)):
+            print(f"Skipping {video_id}: no frames directory found")
+            continue
+
+        # Phase annotations: 1fps, header "Frame\tPhase", entries "0\tPreparation" etc.
+        phase_path = os.path.join(phase_ann_dir, ann_file)
+        with open(phase_path, 'r') as f:
+            phase_lines = f.readlines()[1:]  # skip header
+
+        # Tool annotations: 25fps frame index (0, 25, 50 ... = seconds 0, 1, 2 ...)
+        tool_dict = {}
+        tool_path = os.path.join(tool_ann_dir, video_id + '-tool.txt')
+        if os.path.exists(tool_path):
+            with open(tool_path, 'r') as f:
+                f.readline()  # skip header
+                for line in f:
+                    parts = line.strip().split()
+                    if len(parts) > 1:
+                        tool_dict[parts[0]] = list(map(int, parts[1:]))
+
+        total_frames = len(phase_lines)
+
+        if vid_num in TRAIN_NUMBERS:
             unique_id = unique_id_train
-        elif vid_id in TEST_NUMBERS:
+        else:
             unique_id = unique_id_test
 
-        # 打开视频文件
-        vidcap = cv2.VideoCapture(os.path.join(ROOT_DIR, './videos/' + video_name))
-        # 帧率(frames per second)
-        fps = vidcap.get(cv2.CAP_PROP_FPS)
-        if fps != 25:
-            print(video_name, 'not at 25fps', fps)
-        # 总帧数(frames)
-        frames = vidcap.get(cv2.CAP_PROP_FRAME_COUNT)
+        frame_infos = []
+        for line in phase_lines:
+            parts = line.strip().split()
+            if len(parts) < 2:
+                continue
+            frame_id_1fps = int(parts[0])   # 0-indexed 1fps frame number
+            phase_name = parts[1]
 
-        # 打开Label文件
-        tool_path = os.path.join(ROOT_DIR, 'tool_annotations', video_name.replace('.mp4', '-tool.txt'))
-        tool_file = open(tool_path, 'r')
-        tool = tool_file.readline().strip().split()
-        tool_name = tool[1:]
-        tool_dict = dict()
-        while tool:
-            tool = tool_file.readline().strip().split()
-            if len(tool) > 0:
-                tool = list(map(int, tool))
-                tool_dict[str(tool[0])] = tool[1:]
+            tool_gt = tool_dict.get(str(frame_id_1fps * 25), None)
 
-        phase_path = os.path.join(ROOT_DIR, 'phase_annotations', video_name.replace('.mp4', '-phase.txt'))
-        phase_file = open(phase_path, 'r')
-        phase_results = phase_file.readlines()[1:]
+            info = {
+                'unique_id': unique_id,
+                'frame_id': frame_id_1fps,      # 0-indexed; filename = videoXX_XXXXXX.png where index = frame_id+1
+                'video_id': video_id,
+                'tool_gt': tool_gt,
+                'phase_gt': phase2id[phase_name],
+                'phase_name': phase_name,
+                'fps': 1,
+                'frames': total_frames,
+            }
+            frame_infos.append(info)
+            unique_id += 1
 
-        frame_infos = list()
-        frame_id_ = 0
-        for frame_id in tqdm(range(0, int(frames))):
-            if frame_id % fps == 0:
-                info = dict()
-                info['unique_id'] = unique_id
-                info['frame_id'] = frame_id // fps
-                assert frame_id // fps == frame_id_
-                info['video_id'] = video_id
-
-                if str(frame_id) in tool_dict:
-                    info['tool_gt'] = tool_dict[str(frame_id)]
-                else:
-                    info['tool_gt'] = None
-
-                phase = phase_results[frame_id].strip().split()
-                assert int(phase[0]) == frame_id
-                phase_id = phase2id[phase[1]]
-                info['phase_gt'] = phase_id
-                info['phase_name'] = phase[1]
-                info['fps'] = 1
-                info['original_frames'] = int(frames)
-                info['frames'] = int(frames) // fps
-                # info['tool_names'] = tool_name
-                info['phase_name'] = phase[1]
-                frame_infos.append(info)
-                unique_id += 1
-                frame_id_ += 1
-        
-        vid_id = int(video_name.replace('.mp4', '').replace("video", ""))
-        if vid_id in TRAIN_NUMBERS:
+        if vid_num in TRAIN_NUMBERS:
             train_pkl[video_id] = frame_infos
-            TRAIN_FRAME_NUMBERS += frames
             unique_id_train = unique_id
-        elif vid_id in TEST_NUMBERS:
+        elif vid_num in TEST_NUMBERS:
             test_pkl[video_id] = frame_infos
-            TEST_FRAME_NUMBERS += frames
             unique_id_test = unique_id
 
     train_save_dir = os.path.join(ROOT_DIR, 'labels', 'train')
     os.makedirs(train_save_dir, exist_ok=True)
-    with open(os.path.join(train_save_dir, '1fpstrain.pickle'), 'wb') as file:
-        pickle.dump(train_pkl, file)
+    with open(os.path.join(train_save_dir, '1fpstrain.pickle'), 'wb') as f:
+        pickle.dump(train_pkl, f)
 
     test_save_dir = os.path.join(ROOT_DIR, 'labels', 'test')
     os.makedirs(test_save_dir, exist_ok=True)
-    with open(os.path.join(test_save_dir, '1fpsval_test.pickle'), 'wb') as file:
-        pickle.dump(test_pkl, file)
+    with open(os.path.join(test_save_dir, '1fpsval_test.pickle'), 'wb') as f:
+        pickle.dump(test_pkl, f)
 
+    print(f'Train videos: {len(train_pkl)}, frames: {unique_id_train}')
+    print(f'Test  videos: {len(test_pkl)}, frames: {unique_id_test}')
 
-    print('TRAIN Frams', TRAIN_FRAME_NUMBERS, unique_id_train)
-    print('TEST Frams', TEST_FRAME_NUMBERS, unique_id_test)
 
 if __name__ == '__main__':
     main()
