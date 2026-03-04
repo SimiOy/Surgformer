@@ -71,8 +71,15 @@ def process_video(video_id, video_source, video_save):
 
 
 if __name__ == "__main__":
-    source_path = "/home/yangshu/Surgformer/data/Cholec80/frames"  # original path
-    save_path = "/home/yangshu/Surgformer/data/Cholec80/frames_cutmargin"  # save path
+    import argparse as _ap
+    _p = _ap.ArgumentParser()
+    _p.add_argument("--source-path", default="data/Cholec80/frames",
+                    help="Directory containing extracted frames")
+    _p.add_argument("--save-path", default="data/Cholec80/frames_cutmargin",
+                    help="Output directory for margin-cut frames")
+    _args = _p.parse_args()
+    source_path = _args.source_path
+    save_path = _args.save_path
 
     create_directory_if_not_exists(save_path)
 

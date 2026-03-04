@@ -5,7 +5,9 @@ from functools import partial
 import torch.nn.functional as F
 import numpy as np
 import sys
-sys.path.append("/home/yangshu/Surgformer")
+import sys as _sys
+import pathlib as _pathlib
+_sys.path.insert(0, str(_pathlib.Path(__file__).resolve().parents[1]))
 import utils
 from timm.models.layers import drop_path, to_2tuple, trunc_normal_
 from timm.models.registry import register_model

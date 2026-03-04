@@ -11,7 +11,9 @@ from collections import OrderedDict
 import torch.nn.functional as F
 import sys
 
-sys.path.append("/home/yangshu/Surgformer")
+import sys as _sys
+import pathlib as _pathlib
+_sys.path.insert(0, str(_pathlib.Path(__file__).resolve().parents[1]))
 
 from datasets.transforms.mixup import Mixup
 from timm.models import create_model
@@ -59,7 +61,7 @@ def get_args():
     )
     parser.add_argument(
         "--pretrained_path",
-        default="/home/yangshu/Surgformer/pretrain_params/timesformer_base_patch16_224_K400.pyth",
+        default="",
         type=str,
         metavar="Parameters",
         help="Name of parameters to load",
@@ -287,13 +289,13 @@ def get_args():
     # Dataset parameters
     parser.add_argument(
         "--data_path",
-        default="/home/yangshu/Surgformer/data/AutoLaparo",
+        default="",
         type=str,
         help="dataset path",
     )
     parser.add_argument(
         "--eval_data_path",
-        default="/home/yangshu/Surgformer/data/AutoLaparo",
+        default="",
         type=str,
         help="dataset path for evaluation",
     )
@@ -331,12 +333,12 @@ def get_args():
     )
     parser.add_argument(
         "--output_dir",
-        default="/home/yangshu/Surgformer/results/AutoLaparo",
+        default="",
         help="path where to save, empty for no saving",
     )
     parser.add_argument(
         "--log_dir",
-        default="/home/yangshu/Surgform/results/AutoLaparo",
+        default="",
         help="path where to tensorboard log",
     )
     parser.add_argument(

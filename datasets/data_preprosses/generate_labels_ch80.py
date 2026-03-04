@@ -5,7 +5,11 @@ import pickle
 from tqdm import tqdm
 
 def main():
-    ROOT_DIR = "/home/yangshu/Surgformer/data/Cholec80"
+    import argparse as _ap
+    _p = _ap.ArgumentParser()
+    _p.add_argument("--data-dir", default="data/Cholec80", help="Root Cholec80 directory")
+    _args, _ = _p.parse_known_args()
+    ROOT_DIR = _args.data_dir
     VIDEO_NAMES = os.listdir(os.path.join(ROOT_DIR, 'videos'))
     VIDEO_NAMES = sorted([x for x in VIDEO_NAMES if 'mp4' in x])
     TRAIN_NUMBERS = np.arange(1,41).tolist()

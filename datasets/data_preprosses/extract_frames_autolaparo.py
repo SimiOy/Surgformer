@@ -3,7 +3,11 @@ import os
 import cv2
 from tqdm import tqdm
 
-ROOT_DIR = "/home/yangshu/Surgformer/data/AutoLaparo"
+import argparse as _ap
+_p = _ap.ArgumentParser()
+_p.add_argument("--data-dir", default="data/AutoLaparo", help="Root AutoLaparo directory")
+_args, _ = _p.parse_known_args()
+ROOT_DIR = _args.data_dir
 VIDEO_NAMES = os.listdir(os.path.join(ROOT_DIR, "videos"))
 VIDEO_NAMES = sorted([x for x in VIDEO_NAMES if 'mp4' in x])
 

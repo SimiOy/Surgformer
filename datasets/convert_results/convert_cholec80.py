@@ -17,7 +17,12 @@ def create_folder_if_not_exists(folder_path):
     else:
         print("文件夹已存在：", folder_path)
 
-main_path = "/home/yangshu/Surgformer/results/Cholec80/"
+import argparse as _ap
+_p = _ap.ArgumentParser()
+_p.add_argument("--results-dir", required=True,
+                help="Results dir containing 0.txt and 1.txt")
+_args = _p.parse_args()
+main_path = _args.results_dir
 file_path_0 = os.path.join(main_path, "0.txt")
 file_path_1 = os.path.join(main_path, "1.txt")
 anns_path = main_path + "/phase_annotations"
