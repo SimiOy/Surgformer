@@ -202,7 +202,7 @@ class PhaseDataset_Cholec80(Dataset):
             )
             if self.data_strategy == "online":
                 buffer, phase_labels, sampled_list = self._video_batch_loader(
-                    frames, frame_id, video_id, index, True
+                    frames, frame_id, video_id, index, self.cut_black
                 )  # T H W C
             elif self.data_strategy == "offline":
                 (
@@ -210,7 +210,7 @@ class PhaseDataset_Cholec80(Dataset):
                     phase_labels,
                     sampled_list,
                 ) = self._video_batch_loader_for_key_frames(
-                    frames, frame_id, video_id, index, True
+                    frames, frame_id, video_id, index, self.cut_black
                 )  # T H W C
 
             buffer = self._aug_frame(buffer, args)
