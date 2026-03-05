@@ -55,27 +55,34 @@ def main():
                     if len(parts) > 1:
                         tool_dict[parts[0]] = list(map(int, parts[1:]))
 
+        # Use actual frame files as the source of truth (same as AutoLaparo generator).
+        # Annotation may have trailing entries beyond the last extracted frame.
+        frames_list = sorted(f for f in os.listdir(os.path.join(frames_dir, video_id)) if f.endswith('.png'))
+        actual_frame_count = len(frames_list)
+
+        # Build phase lookup dict: raw_frame_id (25fps) → phase_name
+        phase_dict = {}
+        for line in phase_lines:
+            parts = line.strip().split()
+            if len(parts) >= 2:
+                phase_dict[int(parts[0])] = parts[1]
+
         if vid_num in TRAIN_NUMBERS:
             unique_id = unique_id_train
         else:
             unique_id = unique_id_test
 
-        # Phase annotations are at 25fps (one line per raw frame: 0, 1, 2, ...).
-        # TF-Cholec80 frames are at 1fps → keep only every 25th annotation line.
+        # Iterate over actual 1fps frames (0-indexed). For 1fps frame S, the
+        # corresponding 25fps annotation entry is raw_frame_id = S * 25.
+        # Frame S maps to file videoXX_{S+1:06d}.png (1-indexed filename).
         frame_infos = []
-        for line in phase_lines:
-            parts = line.strip().split()
-            if len(parts) < 2:
-                continue
-            raw_frame_id = int(parts[0])   # 25fps raw frame index
-
-            if raw_frame_id % 25 != 0:
+        for frame_id_1fps in range(actual_frame_count):
+            raw_frame_id = frame_id_1fps * 25
+            phase_name = phase_dict.get(raw_frame_id)
+            if phase_name is None:
+                print(f"Warning: no annotation for {video_id} frame {frame_id_1fps} (raw {raw_frame_id}), skipping")
                 continue
 
-            frame_id_1fps = raw_frame_id // 25   # 0-indexed 1fps frame number
-            phase_name = parts[1]
-
-            # Tool dict keys are raw 25fps frame indices (0, 25, 50 ...)
             tool_gt = tool_dict.get(str(raw_frame_id), None)
 
             info = {
@@ -86,14 +93,10 @@ def main():
                 'phase_gt': phase2id[phase_name],
                 'phase_name': phase_name,
                 'fps': 1,
-                'frames': 0,    # filled in below once we know the total
+                'frames': actual_frame_count,
             }
             frame_infos.append(info)
             unique_id += 1
-
-        total_frames = len(frame_infos)
-        for info in frame_infos:
-            info['frames'] = total_frames
 
         if vid_num in TRAIN_NUMBERS:
             train_pkl[video_id] = frame_infos
