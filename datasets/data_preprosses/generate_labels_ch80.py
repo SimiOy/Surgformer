@@ -39,7 +39,7 @@ def main():
             print(f"Skipping {video_id}: no frames directory found")
             continue
 
-        # Phase annotations: 1fps, header "Frame\tPhase", entries "0\tPreparation" etc.
+        # Phase annotations: 25fps, header "Frame\tPhase", entries "0\tPrep", "1\tPrep", ... "24\tPrep", "25\tCalot" etc.
         phase_path = os.path.join(phase_ann_dir, ann_file)
         with open(phase_path, 'r') as f:
             phase_lines = f.readlines()[1:]  # skip header
@@ -55,35 +55,45 @@ def main():
                     if len(parts) > 1:
                         tool_dict[parts[0]] = list(map(int, parts[1:]))
 
-        total_frames = len(phase_lines)
-
         if vid_num in TRAIN_NUMBERS:
             unique_id = unique_id_train
         else:
             unique_id = unique_id_test
 
+        # Phase annotations are at 25fps (one line per raw frame: 0, 1, 2, ...).
+        # TF-Cholec80 frames are at 1fps → keep only every 25th annotation line.
         frame_infos = []
         for line in phase_lines:
             parts = line.strip().split()
             if len(parts) < 2:
                 continue
-            frame_id_1fps = int(parts[0])   # 0-indexed 1fps frame number
+            raw_frame_id = int(parts[0])   # 25fps raw frame index
+
+            if raw_frame_id % 25 != 0:
+                continue
+
+            frame_id_1fps = raw_frame_id // 25   # 0-indexed 1fps frame number
             phase_name = parts[1]
 
-            tool_gt = tool_dict.get(str(frame_id_1fps * 25), None)
+            # Tool dict keys are raw 25fps frame indices (0, 25, 50 ...)
+            tool_gt = tool_dict.get(str(raw_frame_id), None)
 
             info = {
                 'unique_id': unique_id,
-                'frame_id': frame_id_1fps,      # 0-indexed; filename = videoXX_XXXXXX.png where index = frame_id+1
+                'frame_id': frame_id_1fps,      # 0-indexed; filename = videoXX_{frame_id+1:06d}.png
                 'video_id': video_id,
                 'tool_gt': tool_gt,
                 'phase_gt': phase2id[phase_name],
                 'phase_name': phase_name,
                 'fps': 1,
-                'frames': total_frames,
+                'frames': 0,    # filled in below once we know the total
             }
             frame_infos.append(info)
             unique_id += 1
+
+        total_frames = len(frame_infos)
+        for info in frame_infos:
+            info['frames'] = total_frames
 
         if vid_num in TRAIN_NUMBERS:
             train_pkl[video_id] = frame_infos
