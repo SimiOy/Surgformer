@@ -43,6 +43,9 @@ def filter_black(image):
     top = max(edges_y)  # top
     height = top - bottom
 
+    if width <= 0 or height <= 0:
+        return image
+
     pre1_picture = image[left : left + width, bottom : bottom + height]
 
     return pre1_picture
