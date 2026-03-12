@@ -22,25 +22,18 @@ def filter_black(image):
     binary_image2 = cv2.medianBlur(
         binary_image2, 19
     )  # filter the noise, need to adjust the parameter based on the dataset
-    x = binary_image2.shape[0]
     y = binary_image2.shape[1]
 
-    edges_x = []
-    edges_y = []
-    for i in range(x):
-        for j in range(10, y - 10):
-            if binary_image2.item(i, j) != 0:
-                edges_x.append(i)
-                edges_y.append(j)
+    mask = binary_image2[:, 10:y - 10]
+    rows, cols = np.where(mask != 0)
 
-    if not edges_x:
+    if rows.size == 0:
         return image
 
-    left = min(edges_x)  # left border
-    right = max(edges_x)  # right
-    width = right - left
-    bottom = min(edges_y)  # bottom
-    top = max(edges_y)  # top
+    left, right = int(rows.min()), int(rows.max())
+    bottom = int(cols.min()) + 10
+    top    = int(cols.max()) + 10
+    width  = right - left
     height = top - bottom
 
     if width <= 0 or height <= 0:
