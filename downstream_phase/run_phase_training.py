@@ -320,7 +320,7 @@ def get_args():
     parser.add_argument(
         "--data_set",
         default="AutoLaparo",
-        choices=["Cholec80", "AutoLaparo", "LungRes80"],
+        choices=["Cholec80", "AutoLaparo", "LungRes80", "M2CAI16"],
         type=str,
         help="dataset",
     )
