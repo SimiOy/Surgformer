@@ -567,7 +567,7 @@ def main(args, ds_init):
 
     model = create_model(
         args.model,
-        pretrained=True,
+        pretrained=bool(args.pretrained_path),
         pretrain_path=args.pretrained_path,
         num_classes=args.nb_classes,
         all_frames=args.num_frames,
