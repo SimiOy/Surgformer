@@ -5,9 +5,7 @@ from datasets.transforms.surg_transforms import *
 from datasets.phase.Cholec80_phase import PhaseDataset_Cholec80
 from datasets.phase.AutoLaparo_phase import PhaseDataset_AutoLaparo
 from datasets.phase.LungRes80_phase import PhaseDataset_LungRes80
-
-# M2CAI16 uses the same pickle/frame structure as Cholec80
-PhaseDataset_M2CAI16 = PhaseDataset_Cholec80
+from datasets.phase.M2CAI16_phase import PhaseDataset_M2CAI16
 
 def build_dataset(is_train, test_mode, fps, args):
     """Load video phase recognition dataset."""
