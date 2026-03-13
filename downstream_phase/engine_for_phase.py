@@ -244,7 +244,8 @@ def final_phase_test(data_loader, model, device, file):
             loss = criterion(output, target)
 
         for i in range(output.size(0)):
-            unique_id, video_id, frame_id = ids[i].strip().split('_')
+            parts = ids[i].strip().split('_')
+            unique_id, video_id, frame_id = parts[0], '_'.join(parts[1:-1]), parts[-1]
             # if flags[i]:
             #     if target[i] == 0:
             #         output.data[i] = torch.tensor([1, 0, 0, 0, 0, 0, 0])
