@@ -368,6 +368,12 @@ def get_args():
     )
     parser.add_argument("--num_workers", default=10, type=int)
     parser.add_argument(
+        "--train_fraction",
+        type=float,
+        default=1.0,
+        help="Fraction of training data to use (e.g. 0.5 or 0.25). Subset is drawn with args.seed for reproducibility.",
+    )
+    parser.add_argument(
         "--pin_mem",
         action="store_true",
         help="Pin CPU memory in DataLoader for more efficient (sometimes) transfer to GPU.",
@@ -464,6 +470,14 @@ def main(args, ds_init):
     dataset_train, args.nb_classes = build_dataset(
         is_train=True, test_mode=False, fps=args.data_fps, args=args
     )  # Cholec80前40个数据集用于训练：2157640
+
+    if args.train_fraction < 1.0:
+        n_total = len(dataset_train)
+        n_keep = int(n_total * args.train_fraction)
+        rng = np.random.default_rng(args.seed)
+        indices = rng.choice(n_total, size=n_keep, replace=False).tolist()
+        dataset_train = torch.utils.data.Subset(dataset_train, indices)
+        print(f"Subsampled training set: {n_keep}/{n_total} samples ({args.train_fraction*100:.0f}%)")
 
     # 是否在训练时在验证集上测试性能
     if args.disable_eval_during_finetuning:
