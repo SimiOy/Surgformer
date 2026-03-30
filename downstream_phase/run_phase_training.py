@@ -41,6 +41,7 @@ from model.surgformer_HTA import surgformer_HTA
 from model.surgformer_HTA_KCA import surgformer_HTA_KCA
 from model.AVT import AVT
 
+
 def get_args():
     parser = argparse.ArgumentParser(
         "SurgVideoMAE fine-tuning and evaluation script for video phase recognition",
@@ -203,7 +204,7 @@ def get_args():
         default="rand-m7-n4-mstd0.5-inc1",
         metavar="NAME",
         help='Use AutoAugment policy. "v0" or "original". " + "(default: rand-m7-n4-mstd0.5-inc1)',
-    ),
+    )
     parser.add_argument(
         "--smoothing", type=float, default=0.1, help="Label smoothing (default: 0.1)"
     )
@@ -320,7 +321,7 @@ def get_args():
     parser.add_argument(
         "--data_set",
         default="AutoLaparo",
-        choices=["Cholec80", "AutoLaparo", "LungRes80", "M2CAI16"],
+        choices=["Cholec80", "AutoLaparo", "LungRes80", "M2CAI16", "MultiBypass140"],
         type=str,
         help="dataset",
     )
@@ -390,7 +391,7 @@ def get_args():
     parser.add_argument(
         "--dist_url", default="env://", help="url used to set up distributed training"
     )
-    
+
     parser.add_argument("--enable_deepspeed", action="store_true", default=False)
 
     known_args, _ = parser.parse_known_args()
@@ -402,7 +403,7 @@ def get_args():
 
             parser = deepspeed.add_config_arguments(parser)
             ds_init = deepspeed.initialize
-        except:
+        except Exception:
             print("Please 'pip install deepspeed'")
             exit(0)
     else:
@@ -463,20 +464,12 @@ def main(args, ds_init):
     seed = args.seed + utils.get_rank()
     torch.manual_seed(seed)
     np.random.seed(seed)
-    # random.seed(seed)
 
     cudnn.benchmark = True
 
     dataset_train, args.nb_classes = build_dataset(
         is_train=True, test_mode=False, fps=args.data_fps, args=args
-    )  # Cholec80前40个数据集用于训练：2157640
-    if args.train_fraction < 1.0:
-        n_total = len(dataset_train)
-        n_keep = int(n_total * args.train_fraction)
-        rng = np.random.default_rng(args.seed)
-        indices = rng.choice(n_total, size=n_keep, replace=False).tolist()
-        dataset_train = torch.utils.data.Subset(dataset_train, indices)
-        print(f"Subsampled training set: {n_keep}/{n_total} samples ({args.train_fraction*100:.0f}%)")
+    )
 
     if args.train_fraction < 1.0:
         n_total = len(dataset_train)
@@ -484,21 +477,22 @@ def main(args, ds_init):
         rng = np.random.default_rng(args.seed)
         indices = rng.choice(n_total, size=n_keep, replace=False).tolist()
         dataset_train = torch.utils.data.Subset(dataset_train, indices)
-        print(f"Subsampled training set: {n_keep}/{n_total} samples ({args.train_fraction*100:.0f}%)")
+        print(
+            f"Subsampled training set: {n_keep}/{n_total} samples ({args.train_fraction*100:.0f}%)"
+        )
 
-    # 是否在训练时在验证集上测试性能
     if args.disable_eval_during_finetuning:
         dataset_val = None
     else:
         dataset_val, _ = build_dataset(
             is_train=False, test_mode=False, fps=args.data_fps, args=args
-        )  # Cholec80第41-48视频序列用于验证集：535933
+        )
     dataset_test, _ = build_dataset(
         is_train=False, test_mode=True, fps=args.data_fps, args=args
-    )  # Cholec80后40个数据集用于测试：2452890
+    )
 
     print("Train Dataset Length: ", len(dataset_train))
-    print("Val Dataset Length: ", len(dataset_val))
+    print("Val Dataset Length: ", len(dataset_val) if dataset_val is not None else 0)
     print("Test Dataset Length: ", len(dataset_test))
 
     num_tasks = utils.get_world_size()
@@ -509,21 +503,28 @@ def main(args, ds_init):
     print("Sampler_train = %s" % str(sampler_train))
 
     if args.dist_eval:
-        if len(dataset_val) % num_tasks != 0:
+        if dataset_val is not None and len(dataset_val) % num_tasks != 0:
             print(
                 "Warning: Enabling distributed evaluation with an eval dataset not divisible by process number. "
                 "This will slightly alter validation results as extra duplicate entries are added to achieve "
                 "equal num of samples per-process."
             )
-        sampler_val = torch.utils.data.DistributedSampler(
-            dataset_val, num_replicas=num_tasks, rank=global_rank, shuffle=False
-        )
+        if dataset_val is not None:
+            sampler_val = torch.utils.data.DistributedSampler(
+                dataset_val, num_replicas=num_tasks, rank=global_rank, shuffle=False
+            )
+        else:
+            sampler_val = None
         sampler_test = torch.utils.data.DistributedSampler(
             dataset_test, num_replicas=num_tasks, rank=global_rank, shuffle=False
         )
         print("Distribute Sampler For Val/Test")
     else:
-        sampler_val = torch.utils.data.SequentialSampler(dataset_val)  # 顺序采样
+        sampler_val = (
+            torch.utils.data.SequentialSampler(dataset_val)
+            if dataset_val is not None
+            else None
+        )
         sampler_test = torch.utils.data.SequentialSampler(dataset_test)
         print("Sequential Sampler For Val/Test")
 
@@ -570,7 +571,6 @@ def main(args, ds_init):
     else:
         data_loader_test = None
 
-    # 训练Trick，有效显著的数据增强效果，参见：https://blog.csdn.net/sophicchen/article/details/120432083
     mixup_fn = None
     mixup_active = args.mixup > 0 or args.cutmix > 0.0 or args.cutmix_minmax is not None
     if mixup_active:
@@ -611,15 +611,13 @@ def main(args, ds_init):
     print("Window size: = %s" % str(args.window_size))
     args.patch_size = patch_size
 
-    # 加载预训练参数，并且根据策略调整Patch_embedding，可直接加载基于VideoMAE预训练参数
-    # 也可以加载官方的VIT的预训练参数
     if args.finetune:
         if args.finetune.startswith("https"):
             checkpoint = torch.hub.load_state_dict_from_url(
                 args.finetune, map_location="cpu", check_hash=True
             )
         else:
-            checkpoint = torch.load(args.finetune, map_location="cpu")
+            checkpoint = torch.load(args.finetune, map_location="cpu", weights_only=False)
 
         print("Load ckpt from %s" % args.finetune)
         checkpoint_model = None
@@ -630,6 +628,7 @@ def main(args, ds_init):
                 break
         if checkpoint_model is None:
             checkpoint_model = checkpoint
+
         state_dict = model.state_dict()
         for k in ["head.weight", "head.bias"]:
             if (
@@ -650,14 +649,12 @@ def main(args, ds_init):
                 new_dict[key] = checkpoint_model[key]
         checkpoint_model = new_dict
 
-        # interpolate position embedding
         if "pos_embed" in checkpoint_model:
             pos_embed_checkpoint = checkpoint_model["pos_embed"]
-            embedding_size = pos_embed_checkpoint.shape[-1]  # channel dim
+            embedding_size = pos_embed_checkpoint.shape[-1]
             num_patches = model.patch_embed.num_patches
-            num_extra_tokens = model.pos_embed.shape[-2] - num_patches  # 0/1
+            num_extra_tokens = model.pos_embed.shape[-2] - num_patches
 
-            # height (== width) for the checkpoint position embedding
             orig_size = int(
                 (
                     (pos_embed_checkpoint.shape[-2] - num_extra_tokens)
@@ -665,21 +662,15 @@ def main(args, ds_init):
                 )
                 ** 0.5
             )
-            # height (== width) for the new position embedding
-            new_size = int(
-                (num_patches // (args.num_frames))
-                ** 0.5
-            )
-            # class_token and dist_token are kept unchanged
+            new_size = int((num_patches // (args.num_frames)) ** 0.5)
+
             if orig_size != new_size:
                 print(
                     "Position interpolate from %dx%d to %dx%d"
                     % (orig_size, orig_size, new_size, new_size)
                 )
                 extra_tokens = pos_embed_checkpoint[:, :num_extra_tokens]
-                # only the position tokens are interpolated
                 pos_tokens = pos_embed_checkpoint[:, num_extra_tokens:]
-                # B, L, C -> BT, H, W, C -> BT, C, H, W
                 pos_tokens = pos_tokens.reshape(
                     -1,
                     args.num_frames,
@@ -696,7 +687,6 @@ def main(args, ds_init):
                     mode="bicubic",
                     align_corners=False,
                 )
-                # BT, C, H, W -> BT, H, W, C ->  B, T, H, W, C
                 pos_tokens = pos_tokens.permute(0, 2, 3, 1).reshape(
                     -1,
                     args.num_frames,
@@ -704,14 +694,14 @@ def main(args, ds_init):
                     new_size,
                     embedding_size,
                 )
-                pos_tokens = pos_tokens.flatten(1, 3)  # B, L, C
+                pos_tokens = pos_tokens.flatten(1, 3)
                 new_pos_embed = torch.cat((extra_tokens, pos_tokens), dim=1)
                 checkpoint_model["pos_embed"] = new_pos_embed
 
-        if 'time_embed' in checkpoint_model and args.num_frames != checkpoint_model['time_embed'].size(1):
-            time_embed = checkpoint_model['time_embed'].transpose(1, 2).float()
-            new_time_embed = F.interpolate(time_embed, size=(args.num_frames), mode='nearest')
-            checkpoint_model['time_embed'] = new_time_embed.transpose(1, 2)
+        if "time_embed" in checkpoint_model and args.num_frames != checkpoint_model["time_embed"].size(1):
+            time_embed = checkpoint_model["time_embed"].transpose(1, 2).float()
+            new_time_embed = F.interpolate(time_embed, size=(args.num_frames), mode="nearest")
+            checkpoint_model["time_embed"] = new_time_embed.transpose(1, 2)
 
         utils.load_state_dict(model, checkpoint_model, prefix=args.model_prefix)
 
@@ -720,7 +710,6 @@ def main(args, ds_init):
     model_without_ddp = model
     n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
 
-    # print("Model = %s" % str(model_without_ddp))
     print("number of params:", n_parameters)
 
     total_batch_size = args.batch_size * args.update_freq * utils.get_world_size()
@@ -740,11 +729,9 @@ def main(args, ds_init):
         assigner = LayerDecayValueAssigner(
             [args.layer_decay] * (num_layers + 1) + [1.0]
         )
-    elif args.layer_decay < 1.0:  # 沿层以几何方式降低学习率
+    elif args.layer_decay < 1.0:
         assigner = LayerDecayValueAssigner(
-            list(
-                args.layer_decay ** (num_layers + 1 - i) for i in range(num_layers + 2)
-            )
+            list(args.layer_decay ** (num_layers + 1 - i) for i in range(num_layers + 2))
         )
     else:
         assigner = None
@@ -815,7 +802,6 @@ def main(args, ds_init):
     )
 
     if mixup_fn is not None:
-        # smoothing is handled with mixup label transform
         criterion = SoftTargetCrossEntropy()
     elif args.smoothing > 0.0:
         criterion = LabelSmoothingCrossEntropy(smoothing=args.smoothing)
@@ -909,9 +895,7 @@ def main(args, ds_init):
                         model_ema=None,
                     )
 
-            print(
-                f"Max accuracy: {max_accuracy:.2f}%" + "   Max Epoch: " + str(max_epoch)
-            )
+            print(f"Max accuracy: {max_accuracy:.2f}%   Max Epoch: {max_epoch}")
             if log_writer is not None:
                 log_writer.update(val_acc1=test_stats["acc1"], head="perf", step=epoch)
                 log_writer.update(val_acc5=test_stats["acc5"], head="perf", step=epoch)
@@ -937,7 +921,6 @@ def main(args, ds_init):
             ) as f:
                 f.write(json.dumps(log_stats) + "\n")
 
-    # ==================================================================
     model = create_model(
         args.model,
         pretrained=False,
@@ -951,7 +934,7 @@ def main(args, ds_init):
     )
     preds_file = os.path.join(args.output_dir, str(global_rank) + ".txt")
     best_pretrained_path = os.path.join(args.output_dir, "checkpoint-best/mp_rank_00_model_states.pt")
-    checkpoint = torch.load(best_pretrained_path, map_location="cpu")
+    checkpoint = torch.load(best_pretrained_path, map_location="cpu", weights_only=False)
 
     print("Load ckpt from %s" % best_pretrained_path)
     checkpoint_model = None
@@ -985,8 +968,8 @@ def main(args, ds_init):
 
     model.to(device)
     model = torch.nn.parallel.DistributedDataParallel(
-                model, device_ids=[args.gpu], find_unused_parameters=True
-            )
+        model, device_ids=[args.gpu], find_unused_parameters=True
+    )
 
     test_stats = final_phase_test(data_loader_test, model, device, preds_file)
     torch.distributed.barrier()
@@ -1010,5 +993,4 @@ def main(args, ds_init):
 
 if __name__ == "__main__":
     opts, ds_init = get_args()
-
     main(opts, ds_init)
