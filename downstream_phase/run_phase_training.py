@@ -877,6 +877,7 @@ def main(args, ds_init):
                     model_ema=None,
                 )
         if data_loader_val is not None:
+            torch.cuda.empty_cache()
             test_stats = validation_one_epoch(data_loader_val, model, device)
             print(
                 f"Accuracy of the network on the {len(dataset_val)} val videos: {test_stats['acc1']:.1f}%"
